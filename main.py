@@ -1,7 +1,6 @@
 # main.py
-# Main integration file
-# Connects all modules together
-# Pothole model disabled - training in progress
+# Main integration file - Complete Version
+# Uses improved drowsiness, emotion and phone detectors
 
 import cv2
 import numpy as np
@@ -11,11 +10,15 @@ from deepface import DeepFace
 import threading
 import time
 import os
+from collections import Counter
 
 # Import our modules
 from fusion.risk_engine import calculate_risk
 from chatbot.llm_coach import give_voice_advice
 from hardware.arduino_controller import ArduinoController
+from driver_monitoring.drowsiness import DrowsinessDetector
+from driver_monitoring.emotion import EmotionDetector
+from driver_monitoring.phone_detection import PhoneDetector
 
 # ═══════════════════════════════════
 # LOAD MODELS
@@ -57,11 +60,6 @@ print("MediaPipe loaded! ✅")
 # SETTINGS
 # ═══════════════════════════════════
 
-LEFT_EYE  = [362, 385, 387, 263, 373, 380]
-RIGHT_EYE = [33,  160, 158, 133, 153, 144]
-EAR_THRESHOLD = 0.25
-DROWSY_FRAMES = 20
-
 HAZARD_SCORES = {
     "person":        ("Pedestrian", 70),
     "dog":           ("Animal", 40),
@@ -91,25 +89,12 @@ road_score    = 0
 hazard_label  = "None"
 driver_score  = 0
 driver_state  = "Alert"
-emotion       = "neutral"
-drowsy_frames = 0
-frame_count   = 0
 voice_timer   = 0
 alert_timer   = 0
 
 # ═══════════════════════════════════
-# HELPER FUNCTIONS
+# ROAD DETECTION
 # ═══════════════════════════════════
-
-def get_ear(landmarks, eye_indices, w, h):
-    pts = [(int(landmarks[i].x * w),
-            int(landmarks[i].y * h))
-           for i in eye_indices]
-    A = np.linalg.norm(np.array(pts[1]) - np.array(pts[5]))
-    B = np.linalg.norm(np.array(pts[2]) - np.array(pts[4]))
-    C = np.linalg.norm(np.array(pts[0]) - np.array(pts[3]))
-    return (A + B) / (2.0 * C)
-
 
 def process_road_frame(frame):
     """Runs YOLOv11 on road camera"""
@@ -132,7 +117,6 @@ def process_road_frame(frame):
     hazard_label = max_label
 
     annotated = results[0].plot()
-
     colour = (0, 255, 0) if max_score == 0 else (0, 0, 255)
     cv2.putText(annotated,
         f"Hazard: {max_label} ({max_score}pts)",
@@ -143,97 +127,35 @@ def process_road_frame(frame):
     return annotated
 
 
-def process_driver_frame(frame, landmarker):
-    """Runs all driver monitoring"""
-    global driver_score, driver_state
-    global drowsy_frames, frame_count, emotion
+# ═══════════════════════════════════
+# DRIVER MONITORING
+# ═══════════════════════════════════
 
-    frame_count += 1
-    h, w = frame.shape[:2]
+def process_driver_frame(frame, drowsiness_det,
+                         emotion_det, phone_det):
+    """Runs all driver monitoring using improved detectors"""
+    global driver_score, driver_state
+
     temp_score = 0
     temp_state = "Alert"
 
-    # MediaPipe drowsiness
-    mp_image = mp.Image(
-        image_format=mp.ImageFormat.SRGB,
-        data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    )
-    result = landmarker.detect(mp_image)
+    # Drowsiness detection
+    frame, d_state, d_score = drowsiness_det.detect(frame)
+    temp_score += d_score
+    if d_state != "Alert":
+        temp_state = d_state
 
-    if result.face_landmarks:
-        lm = result.face_landmarks[0]
-        ear = (get_ear(lm, LEFT_EYE, w, h) +
-               get_ear(lm, RIGHT_EYE, w, h)) / 2.0
-
-        if ear < EAR_THRESHOLD:
-            drowsy_frames += 1
-        else:
-            drowsy_frames = 0
-
-        if drowsy_frames >= DROWSY_FRAMES:
-            temp_score += 60
-            temp_state  = "Drowsy"
-            cv2.putText(frame, "DROWSY!",
-                (30, 60),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1, (0, 0, 255), 2)
-        else:
-            cv2.putText(frame, f"ALERT EAR:{ear:.2f}",
-                (30, 60),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7, (0, 255, 0), 2)
-    else:
-        cv2.putText(frame, "NO FACE DETECTED",
-            (30, 60),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7, (0, 255, 255), 2)
-
-    # DeepFace emotion every 5th frame
-    if frame_count % 5 == 0:
-        try:
-            small = cv2.resize(frame, (640, 480))
-            result_emotion = DeepFace.analyze(
-                small,
-                actions=['emotion'],
-                enforce_detection=False,
-                detector_backend='opencv',
-                silent=True
-            )
-            emotion = result_emotion[0]['dominant_emotion']
-        except:
-            emotion = "neutral"
-
-    if emotion in ['angry', 'fear', 'disgust']:
-        temp_score += 40
-        if temp_state == "Alert":
-            temp_state = emotion.capitalize()
-        cv2.putText(frame,
-            f"EMOTION: {emotion.upper()}",
-            (30, 100),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7, (0, 0, 255), 2)
-    else:
-        cv2.putText(frame,
-            f"Emotion: {emotion}",
-            (30, 100),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7, (0, 255, 0), 2)
+    # Emotion detection
+    frame, emotion, e_score, e_state = emotion_det.detect(frame)
+    temp_score += e_score
+    if e_state != "Alert" and temp_state == "Alert":
+        temp_state = e_state
 
     # Phone detection
-    phone_results = yolo_model(
-        frame, conf=0.4, verbose=False, classes=[67])
-    if len(phone_results[0].boxes) > 0:
-        temp_score += 50
-        temp_state  = "Phone"
-        cv2.putText(frame, "PHONE DETECTED!",
-            (30, 140),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7, (0, 0, 255), 2)
-    else:
-        cv2.putText(frame, "No Phone",
-            (30, 140),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7, (0, 255, 0), 2)
+    frame, p_state, p_score = phone_det.detect(frame)
+    temp_score += p_score
+    if p_state != "Alert":
+        temp_state = p_state
 
     # Earphone detection
     if earphone_model is not None:
@@ -266,95 +188,115 @@ def main():
     # Initialize Arduino
     arduino = ArduinoController()
 
+    # Initialize improved detectors
+    print("Initializing detectors...")
+    drowsiness_detector = DrowsinessDetector()
+    emotion_detector    = EmotionDetector()
+    phone_detector      = PhoneDetector()
+    print("All detectors ready! ✅")
+
     # Open cameras
     driver_cam = cv2.VideoCapture(1)
     road_cam   = cv2.VideoCapture(0)
 
     if not driver_cam.isOpened():
         print("ERROR: Driver camera not found!")
-        return
+        print("Trying index 0...")
+        driver_cam = cv2.VideoCapture(0)
+        road_cam   = cv2.VideoCapture(1)
 
-    # Setup MediaPipe
-    options = FaceLandmarkerOptions(
-        base_options=BaseOptions(
-            model_asset_path=MODEL_PATH),
-        num_faces=1
-    )
+    if not driver_cam.isOpened():
+        print("ERROR: No camera found!")
+        return
 
     critical_start_time = None
 
-    with FaceLandmarker.create_from_options(options) as landmarker:
-        while True:
-            ret1, driver_frame = driver_cam.read()
-            ret2, road_frame   = road_cam.read()
+    print("\nSystem running! Look at driver camera to calibrate...")
+    print("Keep eyes open for 2 seconds for calibration\n")
 
-            if not ret1:
-                print("Driver camera error!")
-                break
+    while True:
+        ret1, driver_frame = driver_cam.read()
+        ret2, road_frame   = road_cam.read()
 
-            driver_frame = process_driver_frame(
-                driver_frame, landmarker)
+        if not ret1:
+            print("Driver camera error!")
+            break
 
-            if ret2:
-                road_frame = process_road_frame(road_frame)
-            else:
-                road_frame = process_road_frame(
-                    driver_frame.copy())
+        # Process frames
+        driver_frame = process_driver_frame(
+            driver_frame,
+            drowsiness_detector,
+            emotion_detector,
+            phone_detector
+        )
 
-            final_score, level = calculate_risk(
-                road_score, driver_score)
+        if ret2:
+            road_frame = process_road_frame(road_frame)
+        else:
+            road_frame = process_road_frame(
+                driver_frame.copy())
 
-            colours = {
-                "SAFE":     (0, 255, 0),
-                "MEDIUM":   (0, 255, 255),
-                "HIGH":     (0, 165, 255),
-                "CRITICAL": (0, 0, 255)
-            }
-            colour = colours[level]
+        # Calculate risk
+        final_score, level = calculate_risk(
+            road_score, driver_score)
 
-            cv2.putText(driver_frame,
-                f"RISK: {final_score}/100 - {level}",
-                (30, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8, colour, 2)
+        # Show risk on driver frame
+        colours = {
+            "SAFE":     (0, 255, 0),
+            "MEDIUM":   (0, 255, 255),
+            "HIGH":     (0, 165, 255),
+            "CRITICAL": (0, 0, 255)
+        }
+        colour = colours[level]
 
-            current_time = time.time()
-            if current_time - alert_timer > 2:
-                arduino.trigger_alert(level)
-                alert_timer = current_time
+        cv2.putText(driver_frame,
+            f"RISK: {final_score}/100 - {level}",
+            (30, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8, colour, 2)
 
-            if level == "CRITICAL":
-                if critical_start_time is None:
-                    critical_start_time = current_time
-                elapsed = current_time - critical_start_time
-                if elapsed > 10:
-                    arduino.trigger_external_led("PULSE")
-                if elapsed > 20:
-                    arduino.trigger_external_led("SOLID")
-            else:
-                critical_start_time = None
-                arduino.trigger_external_led("OFF")
+        # Send alert to Arduino every 2 seconds
+        current_time = time.time()
+        if current_time - alert_timer > 2:
+            arduino.trigger_alert(level)
+            alert_timer = current_time
 
-            if current_time - voice_timer > 5:
-                if level in ["HIGH", "CRITICAL"]:
-                    threading.Thread(
-                        target=give_voice_advice,
-                        args=(level, hazard_label,
-                              driver_state),
-                        daemon=True
-                    ).start()
-                    voice_timer = current_time
+        # Handle CRITICAL escalation
+        if level == "CRITICAL":
+            if critical_start_time is None:
+                critical_start_time = current_time
+            elapsed = current_time - critical_start_time
+            if elapsed > 10:
+                arduino.trigger_external_led("PULSE")
+            if elapsed > 20:
+                arduino.trigger_external_led("SOLID")
+        else:
+            critical_start_time = None
+            arduino.trigger_external_led("OFF")
 
-            print(f"Road:{road_score}({hazard_label}) "
-                  f"Driver:{driver_score}({driver_state}) "
-                  f"Score:{final_score} Level:{level}  ",
-                  end='\r')
+        # Voice alert every 5 seconds
+        if current_time - voice_timer > 5:
+            if level in ["HIGH", "CRITICAL"]:
+                threading.Thread(
+                    target=give_voice_advice,
+                    args=(level, hazard_label,
+                          driver_state),
+                    daemon=True
+                ).start()
+                voice_timer = current_time
 
-            cv2.imshow("Road Camera", road_frame)
-            cv2.imshow("Driver Camera", driver_frame)
+        # Print status in terminal
+        print(f"Road:{road_score}({hazard_label}) "
+              f"Driver:{driver_score}({driver_state}) "
+              f"Score:{final_score} Level:{level}  ",
+              end='\r')
 
-            if cv2.waitKey(1) == ord('q'):
-                break
+        # Show both camera feeds
+        cv2.imshow("Road Camera", road_frame)
+        cv2.imshow("Driver Camera", driver_frame)
+
+        if cv2.waitKey(1) == ord('q'):
+            break
 
     driver_cam.release()
     road_cam.release()
