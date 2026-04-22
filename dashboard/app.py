@@ -13,7 +13,7 @@ import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 st.set_page_config(
-    page_title="SafeGuard AI",
+    page_title="DuoVision",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -323,7 +323,7 @@ def load_models():
             EmotionDetector(),
             PhoneDetector())
 
-with st.spinner("🔄 Initializing SafeGuard AI..."):
+with st.spinner("🔄 Initializing DuoVision..."):
     yolo_model, drowsiness_det, emotion_det, phone_det = load_models()
 
 HAZARD_SCORES = {
@@ -379,7 +379,7 @@ def get_col(level):
 def get_bg(level):
     return {"SAFE":"rgba(0,255,157,0.1)","MEDIUM":"rgba(255,214,0,0.1)","HIGH":"rgba(255,109,0,0.1)","CRITICAL":"rgba(255,23,68,0.1)"}.get(level,"rgba(0,255,157,0.1)")
 
-add_log("SafeGuard AI started","info")
+add_log("DuoVision  started","info")
 add_log("Both cameras active","info")
 add_log("Calibrating EAR threshold...","info")
 
@@ -466,8 +466,8 @@ while True:
             <div style="display:flex;align-items:center;gap:10px">
                 <div style="width:34px;height:34px;border:2px solid var(--accent-cyan);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 0 12px rgba(0,229,255,0.4)">🛡️</div>
                 <div>
-                    <div class="header-title">SAFEGUARD AI</div>
-                    <div class="header-subtitle">MULTIMODAL DRIVER SAFETY — VTU 2025-26</div>
+                    <div class="header-title">DuoVision</div>
+                    <div class="header-subtitle">MULTIMODAL DRIVER SAFETY</div>
                 </div>
             </div>
         </div>

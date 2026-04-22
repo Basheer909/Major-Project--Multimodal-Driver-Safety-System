@@ -1,6 +1,6 @@
 # chatbot/llm_coach.py
-# Improved Voice Coach with specific messages
-# for every detection scenario
+# Dynamic Voice Coach
+# Gives fresh advice every 8 seconds
 
 from groq import Groq
 import pyttsx3
@@ -17,23 +17,22 @@ engine = pyttsx3.init()
 engine.setProperty('rate', 150)
 engine.setProperty('volume', 1.0)
 
-# Track last spoken message to avoid repetition
-last_spoken = ""
+last_spoken      = ""
 last_spoken_time = 0
-REPEAT_COOLDOWN = 8  # seconds before repeating same message
+
 
 def speak(text):
-    """Speaks text through laptop speakers"""
+    """Speaks text — repeats after 8 seconds"""
     global last_spoken, last_spoken_time
 
     current_time = time.time()
 
-    # Don't repeat same message within cooldown
+    # Allow same message after 8 seconds
     if text == last_spoken and \
-       current_time - last_spoken_time < REPEAT_COOLDOWN:
+       current_time - last_spoken_time < 8:
         return
 
-    last_spoken = text
+    last_spoken      = text
     last_spoken_time = current_time
 
     print(f"Voice: {text}")
@@ -44,94 +43,71 @@ def speak(text):
         pass
 
 
-# ═══════════════════════════════════
-# SPECIFIC ROAD ALERTS
-# ═══════════════════════════════════
-
 def get_road_alert(hazard):
-    """Returns specific alert for each road hazard"""
+    """Specific alert for each road hazard"""
     alerts = {
         "Pedestrian":
             "Warning! Pedestrian detected ahead. Please slow down immediately.",
-
         "Animal":
             "Caution! Animal on the road ahead. Reduce your speed now.",
-
         "Road Debris":
             "Warning! Road debris detected ahead. Drive carefully.",
-
         "Vehicle":
             "Caution! Vehicle detected ahead. Maintain safe distance.",
-
         "Traffic Signal":
             "Traffic signal ahead. Be prepared to stop.",
-
         "Stop Sign":
-            "Stop sign detected ahead. Please slow down.",
-
+            "Stop sign detected. Please slow down.",
         "Pothole":
             "Caution! Pothole detected ahead. Reduce speed now.",
-
-        "None":
-            ""
+        "None": ""
     }
     return alerts.get(hazard,
         f"Caution! {hazard} detected ahead. Stay alert.")
 
 
-# ═══════════════════════════════════
-# SPECIFIC DRIVER ALERTS
-# ═══════════════════════════════════
-
 def get_driver_alert(driver_state):
-    """Returns specific alert for each driver condition"""
+    """Specific alert for each driver condition"""
     alerts = {
         "Drowsy":
             "Alert! You are feeling drowsy. Please wake up and focus on the road.",
-
         "Phone":
             "Warning! Please put your phone down. Using phone while driving is dangerous.",
-
         "Angry":
             "Caution! You seem angry. Take a deep breath and calm down before driving.",
-
         "Fear":
             "Stay calm! Focus on the road ahead. You are in control.",
-
         "Disgust":
             "Please focus on the road. Distracted driving is dangerous.",
-
         "Earphone":
             "Warning! Remove your earphones. You need to hear road sounds while driving.",
-
-        "Alert":
-            ""
+        "Alert": ""
     }
     return alerts.get(driver_state,
         f"Alert! {driver_state} detected. Please focus on driving.")
 
 
-# ═══════════════════════════════════
-# COMBINED CRITICAL ALERT
-# ═══════════════════════════════════
-
 def get_combined_alert(hazard, driver_state):
     """
-    Returns combined alert when BOTH road and
-    driver danger exist simultaneously
-    Uses Groq LLaMA 3 for personalised advice
+    LLM generated combined alert
+    when BOTH road and driver danger exist
+    Generates fresh advice every call
     """
     try:
+        # Add timestamp to get fresh response each time
+        timestamp = int(time.time())
+
         prompt = f"""
         You are a car safety AI assistant.
         Give exactly 2 urgent sentences of safety advice.
-        Current situation:
+        Situation at time {timestamp}:
         - Road hazard: {hazard}
         - Driver condition: {driver_state}
         Rules:
         - Be direct and urgent
         - Mention both the hazard and driver condition
         - Never suggest sudden braking
+        - Vary your wording each time
         - Keep total under 30 words
         """
 
@@ -139,36 +115,35 @@ def get_combined_alert(hazard, driver_state):
             model="llama3-8b-8192",
             messages=[{"role": "user",
                        "content": prompt}],
-            max_tokens=80
+            max_tokens=80,
+            temperature=0.9  # Higher = more varied responses
         )
 
         advice = response.choices[0].message.content.strip()
         return advice
 
     except Exception as e:
-        # Fallback if Groq fails
-        road_msg   = get_road_alert(hazard)
-        driver_msg = get_driver_alert(driver_state)
-        return f"Critical danger! {road_msg} Also, {driver_msg}"
+        # Rotate through fallback messages
+        fallbacks = [
+            f"Critical danger! {hazard} ahead and driver is {driver_state}. Pull over immediately!",
+            f"Emergency! {driver_state} driver with {hazard} on road. Take action now!",
+            f"Danger! Both road hazard and driver impairment detected. Stop safely!",
+        ]
+        idx = int(time.time()) % len(fallbacks)
+        return fallbacks[idx]
 
-
-# ═══════════════════════════════════
-# MAIN VOICE ADVICE FUNCTION
-# ═══════════════════════════════════
 
 def give_voice_advice(risk_level, hazard, driver_state):
     """
-    Main function called every 5 seconds
-    Gives specific voice alert based on situation
+    Main function called every 8 seconds
+    Gives dynamic voice alert based on situation
     """
     message = ""
 
     if risk_level == "SAFE":
-        # No alert for safe
         return "All clear."
 
     elif risk_level == "MEDIUM":
-        # Single danger — specific message
         if hazard != "None" and driver_state == "Alert":
             message = get_road_alert(hazard)
         elif hazard == "None" and driver_state != "Alert":
@@ -177,21 +152,16 @@ def give_voice_advice(risk_level, hazard, driver_state):
             message = get_road_alert(hazard)
 
     elif risk_level == "HIGH":
-        # Significant danger — specific message
         if hazard != "None" and driver_state == "Alert":
             message = get_road_alert(hazard)
         elif hazard == "None" and driver_state != "Alert":
             message = get_driver_alert(driver_state)
         else:
-            # Both exist — combined message
-            message = get_combined_alert(
-                hazard, driver_state)
+            message = get_combined_alert(hazard, driver_state)
 
     elif risk_level == "CRITICAL":
-        # Both dangers — LLM combined message
         if hazard != "None" and driver_state != "Alert":
-            message = get_combined_alert(
-                hazard, driver_state)
+            message = get_combined_alert(hazard, driver_state)
         elif hazard != "None":
             message = get_road_alert(hazard)
         else:
@@ -203,40 +173,33 @@ def give_voice_advice(risk_level, hazard, driver_state):
     return message
 
 
-# ═══════════════════════════════════
-# TEST
-# ═══════════════════════════════════
-
+# Test
 if __name__ == "__main__":
-    print("Testing Voice Coach...")
+    print("Testing Dynamic Voice Coach...")
     print()
 
-    print("Test 1 — Phone detected:")
+    print("Test 1 — Phone:")
     give_voice_advice("HIGH", "None", "Phone")
-    time.sleep(5)
+    time.sleep(6)
 
-    print("Test 2 — Pedestrian on road:")
+    print("Test 2 — Pedestrian:")
     give_voice_advice("HIGH", "Pedestrian", "Alert")
-    time.sleep(5)
+    time.sleep(6)
 
-    print("Test 3 — Animal on road:")
-    give_voice_advice("MEDIUM", "Animal", "Alert")
-    time.sleep(5)
-
-    print("Test 4 — Drowsy driver:")
+    print("Test 3 — Drowsy:")
     give_voice_advice("HIGH", "None", "Drowsy")
-    time.sleep(5)
+    time.sleep(6)
 
-    print("Test 5 — Earphone detected:")
-    give_voice_advice("MEDIUM", "None", "Earphone")
-    time.sleep(5)
-
-    print("Test 6 — CRITICAL both dangers:")
+    print("Test 4 — CRITICAL both:")
     give_voice_advice("CRITICAL", "Pedestrian", "Drowsy")
     time.sleep(6)
 
-    print("Test 7 — Road debris:")
-    give_voice_advice("HIGH", "Road Debris", "Alert")
-    time.sleep(5)
+    print("Test 5 — Same CRITICAL again:")
+    give_voice_advice("CRITICAL", "Pedestrian", "Drowsy")
+    time.sleep(6)
+
+    print("Test 6 — Animal:")
+    give_voice_advice("MEDIUM", "Animal", "Alert")
+    time.sleep(6)
 
     print("All tests done!")
