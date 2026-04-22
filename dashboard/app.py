@@ -1,6 +1,6 @@
 # dashboard/app.py
-# Streamlit dashboard for Driver Safety System
-# Visually appealing with dark theme and animations
+# ULTIMATE Driver Safety AI Dashboard
+# Best possible UI/UX with cyberpunk military aesthetic
 
 import streamlit as st
 import cv2
@@ -8,625 +8,564 @@ import numpy as np
 import time
 import os
 import sys
+import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Page config
 st.set_page_config(
-    page_title="Driver Safety AI",
-    page_icon="🚗",
+    page_title="SafeGuard AI",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for stunning UI
 st.markdown("""
 <style>
-    /* Import fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
 
-    /* Hide streamlit defaults */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display:none;}
+:root {
+    --bg-primary:    #020810;
+    --bg-card:       #071224;
+    --bg-card2:      #060d1a;
+    --border:        #0d2744;
+    --border-glow:   #0a4a8a;
+    --accent-blue:   #00a8ff;
+    --accent-cyan:   #00e5ff;
+    --accent-green:  #00ff9d;
+    --accent-yellow: #ffd600;
+    --accent-orange: #ff6d00;
+    --accent-red:    #ff1744;
+    --text-muted:    #4a6fa5;
+}
 
-    /* Main background */
-    .stApp {
-        background: linear-gradient(135deg, #0a0a0f 0%, #0d1117 50%, #0a0f1a 100%);
-        color: #e0e0e0;
-    }
+#MainMenu, footer, header, .stDeployButton { display: none !important; }
+.stApp { background: var(--bg-primary) !important; }
+.block-container { padding: 0.5rem 1rem !important; max-width: 100% !important; }
 
-    /* Main title */
-    .main-title {
-        font-family: 'Orbitron', monospace;
-        font-size: 2.2rem;
-        font-weight: 900;
-        text-align: center;
-        background: linear-gradient(90deg, #00d4ff, #0088ff, #00d4ff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-size: 200% auto;
-        animation: shine 3s linear infinite;
-        margin-bottom: 0.2rem;
-        letter-spacing: 3px;
-    }
+.stApp::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(0,168,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,168,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+}
 
-    .subtitle {
-        font-family: 'Rajdhani', sans-serif;
-        text-align: center;
-        color: #4a9eff;
-        font-size: 0.9rem;
-        letter-spacing: 4px;
-        text-transform: uppercase;
-        margin-bottom: 1.5rem;
-    }
+.header-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1.2rem;
+    background: linear-gradient(90deg, rgba(0,168,255,0.08), rgba(0,229,255,0.04), rgba(0,168,255,0.08));
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border-glow);
+    margin-bottom: 0.8rem;
+    position: relative;
+    overflow: hidden;
+}
 
-    @keyframes shine {
-        to { background-position: 200% center; }
-    }
+.header-wrap::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+    animation: headerScan 4s linear infinite;
+}
 
-    /* Camera containers */
-    .camera-container {
-        background: linear-gradient(145deg, #0d1117, #161b22);
-        border: 1px solid #21262d;
-        border-radius: 12px;
-        padding: 1rem;
-        position: relative;
-        overflow: hidden;
-    }
+@keyframes headerScan { to { left: 200%; } }
 
-    .camera-container::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #00d4ff, transparent);
-    }
+.header-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.3rem;
+    font-weight: 900;
+    color: var(--accent-cyan);
+    letter-spacing: 4px;
+}
 
-    .camera-label {
-        font-family: 'Orbitron', monospace;
-        font-size: 0.7rem;
-        color: #4a9eff;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
+.header-subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+    margin-top: 2px;
+}
 
-    /* Risk score card */
-    .risk-card {
-        background: linear-gradient(145deg, #0d1117, #161b22);
-        border-radius: 16px;
-        padding: 1.5rem;
-        text-align: center;
-        border: 1px solid #21262d;
-        position: relative;
-        overflow: hidden;
-    }
+.hstat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent-green);
+    text-align: center;
+}
 
-    .risk-number {
-        font-family: 'Orbitron', monospace;
-        font-size: 4rem;
-        font-weight: 900;
-        line-height: 1;
-        margin: 0.5rem 0;
-    }
+.hstat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-align: center;
+}
 
-    .risk-label {
-        font-family: 'Orbitron', monospace;
-        font-size: 1.2rem;
-        letter-spacing: 4px;
-        font-weight: 700;
-        padding: 0.3rem 1rem;
-        border-radius: 20px;
-        display: inline-block;
-        margin: 0.5rem 0;
-    }
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,255,157,0.08);
+    border: 1px solid rgba(0,255,157,0.2);
+    border-radius: 20px;
+    padding: 4px 14px;
+}
 
-    /* Status badges */
-    .status-safe { color: #00ff88; border: 1px solid #00ff88; background: rgba(0,255,136,0.1); }
-    .status-medium { color: #ffaa00; border: 1px solid #ffaa00; background: rgba(255,170,0,0.1); }
-    .status-high { color: #ff6600; border: 1px solid #ff6600; background: rgba(255,102,0,0.1); }
-    .status-critical {
-        color: #ff0044;
-        border: 1px solid #ff0044;
-        background: rgba(255,0,68,0.1);
-        animation: pulse-red 1s ease-in-out infinite;
-    }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+@keyframes critFlash { 0%,100%{opacity:1} 50%{opacity:0.75} }
 
-    @keyframes pulse-red {
-        0%, 100% { box-shadow: 0 0 5px #ff0044; }
-        50% { box-shadow: 0 0 20px #ff0044, 0 0 40px #ff004488; }
-    }
+.cam-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: rgba(0,168,255,0.05);
+    border-bottom: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+}
 
-    /* Metric cards */
-    .metric-card {
-        background: linear-gradient(145deg, #0d1117, #161b22);
-        border: 1px solid #21262d;
-        border-radius: 10px;
-        padding: 0.8rem 1rem;
-        margin: 0.4rem 0;
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-    }
+.cam-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.62rem;
+    color: var(--accent-blue);
+    letter-spacing: 2px;
+}
 
-    .metric-icon {
-        font-size: 1.4rem;
-        width: 36px;
-        text-align: center;
-    }
+.cam-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    padding: 1px 7px;
+    border-radius: 10px;
+    color: var(--accent-green);
+    border: 1px solid rgba(0,255,157,0.3);
+    background: rgba(0,255,157,0.08);
+}
 
-    .metric-info {
-        flex: 1;
-    }
+.risk-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 0.8rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
 
-    .metric-title {
-        font-family: 'Rajdhani', sans-serif;
-        font-size: 0.75rem;
-        color: #8b949e;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-    }
+.risk-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+}
 
-    .metric-value {
-        font-family: 'Orbitron', monospace;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #e0e0e0;
-    }
+.risk-number {
+    font-family: 'Orbitron', monospace;
+    font-size: 3.2rem;
+    font-weight: 900;
+    line-height: 1;
+    transition: color 0.4s;
+}
 
-    /* Alert banner */
-    .alert-banner {
-        background: linear-gradient(90deg, rgba(255,0,68,0.15), rgba(255,0,68,0.05));
-        border-left: 3px solid #ff0044;
-        border-radius: 0 8px 8px 0;
-        padding: 0.6rem 1rem;
-        margin: 0.5rem 0;
-        font-family: 'Rajdhani', sans-serif;
-        font-size: 0.95rem;
-        color: #ff6680;
-        letter-spacing: 1px;
-    }
+.risk-level-badge {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 14px;
+    border-radius: 16px;
+    display: inline-block;
+    letter-spacing: 3px;
+    transition: all 0.4s;
+    margin: 6px 0 10px;
+}
 
-    .info-banner {
-        background: linear-gradient(90deg, rgba(0,212,255,0.1), rgba(0,212,255,0.02));
-        border-left: 3px solid #00d4ff;
-        border-radius: 0 8px 8px 0;
-        padding: 0.6rem 1rem;
-        margin: 0.5rem 0;
-        font-family: 'Rajdhani', sans-serif;
-        font-size: 0.95rem;
-        color: #4ad4ff;
-        letter-spacing: 1px;
-    }
+.risk-bar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    height: 5px;
+    overflow: hidden;
+    margin: 6px 0;
+}
 
-    .safe-banner {
-        background: linear-gradient(90deg, rgba(0,255,136,0.1), rgba(0,255,136,0.02));
-        border-left: 3px solid #00ff88;
-        border-radius: 0 8px 8px 0;
-        padding: 0.6rem 1rem;
-        margin: 0.5rem 0;
-        font-family: 'Rajdhani', sans-serif;
-        font-size: 0.95rem;
-        color: #00ff88;
-        letter-spacing: 1px;
-    }
+.score-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin: 8px 0;
+}
 
-    /* Log section */
-    .log-entry {
-        font-family: 'Rajdhani', monospace;
-        font-size: 0.82rem;
-        color: #8b949e;
-        padding: 0.25rem 0;
-        border-bottom: 1px solid #21262d;
-        letter-spacing: 0.5px;
-    }
+.score-cell {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 6px;
+}
 
-    .log-entry span {
-        color: #4a9eff;
-        margin-right: 0.5rem;
-    }
+.score-cell-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
 
-    /* Score bar */
-    .score-bar-container {
-        background: #161b22;
-        border-radius: 6px;
-        height: 8px;
-        overflow: hidden;
-        margin: 0.5rem 0;
-    }
+.score-cell-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+}
 
-    /* Divider */
-    .custom-divider {
-        border: none;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #21262d, transparent);
-        margin: 1rem 0;
-    }
+.formula-chip {
+    background: rgba(0,168,255,0.08);
+    border: 1px solid rgba(0,168,255,0.2);
+    border-radius: 5px;
+    padding: 3px 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--accent-blue);
+    margin-top: 4px;
+}
 
-    /* Section headers */
-    .section-header {
-        font-family: 'Orbitron', monospace;
-        font-size: 0.7rem;
-        color: #4a9eff;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        margin-bottom: 0.8rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
+.detect-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 5px;
+    margin-top: 5px;
+}
 
-    .section-header::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background: linear-gradient(90deg, #21262d, transparent);
-    }
+.detect-card {
+    background: var(--bg-card2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 
-    /* Streamlit image override */
-    .stImage img {
-        border-radius: 8px;
-        border: 1px solid #21262d;
-    }
+.detect-card.danger { border-color: rgba(255,23,68,0.35); background: rgba(255,23,68,0.04); }
+.detect-card.warning { border-color: rgba(255,109,0,0.35); background: rgba(255,109,0,0.04); }
 
-    /* Progress bar colors */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #00d4ff, #0088ff);
-    }
+.detect-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.detect-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.alert-chip {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.58rem;
+    border: 1px solid;
+    letter-spacing: 1px;
+    opacity: 0.25;
+    transition: all 0.3s;
+    display: inline-block;
+    margin: 2px;
+}
+
+.alert-chip.active { opacity: 1; }
+.c-buz { color:#ff6d00;border-color:#ff6d00 } .c-buz.active { background:rgba(255,109,0,0.1);box-shadow:0 0 7px rgba(255,109,0,0.4) }
+.c-led { color:#ff1744;border-color:#ff1744 } .c-led.active { background:rgba(255,23,68,0.1);box-shadow:0 0 7px rgba(255,23,68,0.4) }
+.c-vib { color:#aa00ff;border-color:#aa00ff } .c-vib.active { background:rgba(170,0,255,0.1);box-shadow:0 0 7px rgba(170,0,255,0.4) }
+.c-voice { color:#00e5ff;border-color:#00e5ff } .c-voice.active { background:rgba(0,229,255,0.1);box-shadow:0 0 7px rgba(0,229,255,0.4) }
+.c-sms { color:#ffd600;border-color:#ffd600 } .c-sms.active { background:rgba(255,214,0,0.1);box-shadow:0 0 7px rgba(255,214,0,0.4) }
+
+.log-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+}
+
+.log-entry { display:flex;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.02) }
+.log-time { color:#00a8ff;min-width:58px }
+.log-info { color:#4a6fa5 }
+.log-warning { color:#ff6d00 }
+.log-critical { color:#ff1744 }
+
+.stImage > img { border-radius: 6px !important; border: 1px solid var(--border) !important; }
+div[data-testid="column"] { padding: 0 3px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown('<div class="main-title">DRIVER SAFETY AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">⚡ Multimodal Real-Time Monitoring System ⚡</div>', unsafe_allow_html=True)
-
-# Import modules
+# ── IMPORTS ──
 from ultralytics import YOLO
 from fusion.risk_engine import calculate_risk
-import mediapipe as mp
-from mediapipe.tasks.python.vision import FaceLandmarker
-from mediapipe.tasks.python.vision import FaceLandmarkerOptions
-from mediapipe.tasks.python import BaseOptions
-from deepface import DeepFace
-import urllib.request
+from chatbot.llm_coach import give_voice_advice
+from driver_monitoring.drowsiness import DrowsinessDetector
+from driver_monitoring.emotion import EmotionDetector
+from driver_monitoring.phone_detection import PhoneDetector
 
-# Load models
 @st.cache_resource
 def load_models():
-    yolo = YOLO("yolo11n.pt")
-    model_path = "face_landmarker.task"
-    if not os.path.exists(model_path):
-        urllib.request.urlretrieve(
-            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            model_path
-        )
-    options = FaceLandmarkerOptions(
-        base_options=BaseOptions(model_asset_path=model_path),
-        num_faces=1
-    )
-    landmarker = FaceLandmarker.create_from_options(options)
-    return yolo, landmarker
+    return (YOLO("yolo11n.pt"),
+            DrowsinessDetector(),
+            EmotionDetector(),
+            PhoneDetector())
 
-with st.spinner("🔄 Initializing AI Models..."):
-    yolo_model, landmarker = load_models()
-
-# Settings
-LEFT_EYE  = [362, 385, 387, 263, 373, 380]
-RIGHT_EYE = [33,  160, 158, 133, 153, 144]
-EAR_THRESHOLD = 0.25
-DROWSY_FRAMES = 20
+with st.spinner("🔄 Initializing SafeGuard AI..."):
+    yolo_model, drowsiness_det, emotion_det, phone_det = load_models()
 
 HAZARD_SCORES = {
-    "person":   ("Pedestrian", 70),
-    "dog":      ("Animal", 40),
-    "cat":      ("Animal", 40),
-    "cow":      ("Animal", 40),
-    "bottle":   ("Road Debris", 70),
-    "cup":      ("Road Debris", 60),
-    "car":      ("Vehicle", 50),
-    "truck":    ("Vehicle", 50),
-    "bus":      ("Vehicle", 50),
-    "motorcycle": ("Vehicle", 50),
-    "bicycle":  ("Vehicle", 40),
+    "person":("Pedestrian",70),"dog":("Animal",40),"cat":("Animal",40),
+    "cow":("Animal",40),"horse":("Animal",40),"bird":("Animal",30),
+    "bottle":("Road Debris",70),"cup":("Road Debris",60),
+    "backpack":("Road Debris",60),"suitcase":("Road Debris",60),
+    "sports ball":("Road Debris",50),"car":("Vehicle",50),
+    "truck":("Vehicle",50),"bus":("Vehicle",50),
+    "motorcycle":("Vehicle",50),"bicycle":("Vehicle",40),
 }
 
-def get_ear(landmarks, eye_indices, w, h):
-    pts = [(int(landmarks[i].x * w), int(landmarks[i].y * h)) for i in eye_indices]
-    A = np.linalg.norm(np.array(pts[1]) - np.array(pts[5]))
-    B = np.linalg.norm(np.array(pts[2]) - np.array(pts[4]))
-    C = np.linalg.norm(np.array(pts[0]) - np.array(pts[3]))
-    return (A + B) / (2.0 * C)
+start_time = time.time()
+header_ph  = st.empty()
 
-# Layout
-col_driver, col_score, col_road = st.columns([5, 3, 5])
-
-with col_driver:
-    st.markdown('<div class="camera-label">📷 Driver Monitor</div>', unsafe_allow_html=True)
+col_d, col_r, col_road = st.columns([5,3,5])
+with col_d:
+    st.markdown('<div class="cam-header"><div class="cam-title">📷 DRIVER MONITOR</div><div class="cam-badge">● LIVE</div></div>', unsafe_allow_html=True)
     driver_img = st.empty()
-    driver_status = st.empty()
+    detect_ph  = st.empty()
 
-with col_score:
-    st.markdown('<div class="camera-label">⚠️ Risk Analysis</div>', unsafe_allow_html=True)
-    risk_display = st.empty()
-    metrics_display = st.empty()
+with col_r:
+    risk_ph = st.empty()
 
 with col_road:
-    st.markdown('<div class="camera-label">🚦 Road Scanner</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cam-header"><div class="cam-title">🚦 ROAD SCANNER</div><div class="cam-badge">● LIVE</div></div>', unsafe_allow_html=True)
     road_img = st.empty()
-    road_status = st.empty()
+    road_ph  = st.empty()
 
-# Bottom section
-st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
-col_voice, col_log = st.columns([1, 1])
+st.markdown('<div style="height:5px"></div>', unsafe_allow_html=True)
+col_a, col_v, col_l = st.columns([2,3,3])
+with col_a: alerts_ph = st.empty()
+with col_v: voice_ph  = st.empty()
+with col_l: log_ph    = st.empty()
 
-with col_voice:
-    st.markdown('<div class="section-header">🔊 Voice Alerts</div>', unsafe_allow_html=True)
-    voice_display = st.empty()
-
-with col_log:
-    st.markdown('<div class="section-header">📋 System Log</div>', unsafe_allow_html=True)
-    log_display = st.empty()
-
-# Open cameras
 driver_cam = cv2.VideoCapture(1)
 road_cam   = cv2.VideoCapture(0)
+if not driver_cam.isOpened():
+    driver_cam = cv2.VideoCapture(0)
+    road_cam   = cv2.VideoCapture(1)
 
-# State
-drowsy_frames = 0
-frame_count   = 0
-emotion       = "neutral"
-log_messages  = []
-last_voice    = ""
+log_msgs    = []
+voice_timer = 0
+frame_count = 0
 
 def add_log(msg, level="info"):
-    timestamp = time.strftime("%H:%M:%S")
-    log_messages.append((timestamp, msg, level))
-    if len(log_messages) > 8:
-        log_messages.pop(0)
+    log_msgs.append((time.strftime("%H:%M:%S"), msg, level))
+    if len(log_msgs) > 6: log_msgs.pop(0)
 
-def get_risk_color(level):
-    colors = {
-        "SAFE":     "#00ff88",
-        "MEDIUM":   "#ffaa00",
-        "HIGH":     "#ff6600",
-        "CRITICAL": "#ff0044"
-    }
-    return colors.get(level, "#00ff88")
+def get_col(level):
+    return {"SAFE":"#00ff9d","MEDIUM":"#ffd600","HIGH":"#ff6d00","CRITICAL":"#ff1744"}.get(level,"#00ff9d")
 
-def get_risk_class(level):
-    return f"status-{level.lower()}"
+def get_bg(level):
+    return {"SAFE":"rgba(0,255,157,0.1)","MEDIUM":"rgba(255,214,0,0.1)","HIGH":"rgba(255,109,0,0.1)","CRITICAL":"rgba(255,23,68,0.1)"}.get(level,"rgba(0,255,157,0.1)")
 
-# Main loop
-add_log("System initialized", "info")
-add_log("Both cameras active", "info")
-add_log("AI models loaded", "info")
+add_log("SafeGuard AI started","info")
+add_log("Both cameras active","info")
+add_log("Calibrating EAR threshold...","info")
 
 while True:
     ret1, driver_frame = driver_cam.read()
     ret2, road_frame   = road_cam.read()
-
-    if not ret1:
-        st.error("Driver camera not found!")
-        break
+    if not ret1: break
 
     frame_count += 1
-    h, w = driver_frame.shape[:2]
-    temp_driver_score = 0
-    temp_driver_state = "Alert"
-    detections = []
+    uptime = int(time.time()-start_time)
+    ups = f"{uptime//60:02d}:{uptime%60:02d}"
 
-    # MediaPipe drowsiness
-    mp_image = mp.Image(
-        image_format=mp.ImageFormat.SRGB,
-        data=cv2.cvtColor(driver_frame, cv2.COLOR_BGR2RGB)
-    )
-    result = landmarker.detect(mp_image)
+    # ── DRIVER ──
+    temp_score = 0; temp_state = "Alert"; dets = []
 
-    if result.face_landmarks:
-        lm = result.face_landmarks[0]
-        ear = (get_ear(lm, LEFT_EYE, w, h) + get_ear(lm, RIGHT_EYE, w, h)) / 2.0
-
-        if ear < EAR_THRESHOLD:
-            drowsy_frames += 1
-        else:
-            drowsy_frames = 0
-
-        if drowsy_frames >= DROWSY_FRAMES:
-            temp_driver_score += 60
-            temp_driver_state = "Drowsy"
-            cv2.putText(driver_frame, "DROWSY DETECTED",
-                (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            detections.append(("😴", "Drowsiness", "DETECTED", "critical"))
-            add_log("Drowsiness detected!", "critical")
-        else:
-            cv2.putText(driver_frame, f"EAR: {ear:.2f}  ALERT",
-                (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 100), 2)
-            detections.append(("👁️", "Eye Status", f"EAR {ear:.2f}", "safe"))
+    driver_frame, d_state, d_score = drowsiness_det.detect(driver_frame)
+    temp_score += d_score
+    if d_state != "Alert":
+        temp_state = d_state
+        dets.append(("😴","DROWSY","DETECTED","danger","#ff1744"))
+        if frame_count%30==0: add_log("Drowsiness detected!","critical")
     else:
-        detections.append(("👤", "Face", "Not Detected", "warning"))
+        dets.append(("👁️","EYES","Alert","","#00ff9d"))
 
-    # Emotion detection
-    if frame_count % 5 == 0:
-        try:
-            small = cv2.resize(driver_frame, (640, 480))
-            result_e = DeepFace.analyze(small, actions=['emotion'],
-                enforce_detection=False, detector_backend='opencv', silent=True)
-            emotion = result_e[0]['dominant_emotion']
-        except:
-            emotion = "neutral"
-
-    if emotion in ['angry', 'fear', 'disgust']:
-        temp_driver_score += 40
-        if temp_driver_state == "Alert":
-            temp_driver_state = emotion.capitalize()
-        cv2.putText(driver_frame, f"EMOTION: {emotion.upper()}",
-            (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 100, 255), 2)
-        detections.append(("😠", "Emotion", emotion.upper(), "warning"))
+    driver_frame, emotion, e_score, e_state = emotion_det.detect(driver_frame)
+    temp_score += e_score
+    if e_state != "Alert" and temp_state == "Alert":
+        temp_state = e_state
+        dets.append(("😠","EMOTION",emotion.upper()[:8],"warning","#ff6d00"))
+        if frame_count%30==0: add_log(f"Emotion: {emotion}","warning")
     else:
-        cv2.putText(driver_frame, f"Emotion: {emotion}",
-            (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 100), 2)
-        detections.append(("😊", "Emotion", emotion, "safe"))
+        dets.append(("😊","EMOTION",emotion[:8],"","#00ff9d"))
 
-    # Phone detection
-    phone_res = yolo_model(driver_frame, conf=0.4, verbose=False, classes=[67])
-    if len(phone_res[0].boxes) > 0:
-        temp_driver_score += 50
-        temp_driver_state = "Phone"
-        cv2.putText(driver_frame, "PHONE IN USE!",
-            (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        detections.append(("📱", "Phone", "IN USE", "critical"))
-        add_log("Phone usage detected!", "critical")
+    driver_frame, p_state, p_score = phone_det.detect(driver_frame)
+    temp_score += p_score
+    if p_state != "Alert":
+        temp_state = p_state
+        dets.append(("📱","PHONE","IN USE","danger","#ff1744"))
+        if frame_count%30==0: add_log("Phone usage detected!","critical")
     else:
-        detections.append(("📱", "Phone", "Clear", "safe"))
+        dets.append(("📱","PHONE","Clear","","#00ff9d"))
 
-    driver_score = min(100, temp_driver_score)
-    driver_state = temp_driver_state
+    driver_score = min(100, temp_score)
+    driver_state = temp_state
 
-    # Road detection
-    road_score   = 0
-    hazard_label = "None"
-
+    # ── ROAD ──
+    road_score = 0; hazard_label = "None"
     if ret2:
         results = yolo_model(road_frame, conf=0.4, verbose=False)
         for box in results[0].boxes:
-            class_id   = int(box.cls[0])
-            class_name = yolo_model.names[class_id]
-            if class_name in HAZARD_SCORES:
-                label, score = HAZARD_SCORES[class_name]
-                if score > road_score:
-                    road_score   = score
-                    hazard_label = label
+            cn = yolo_model.names[int(box.cls[0])]
+            if cn in HAZARD_SCORES:
+                lbl, sc = HAZARD_SCORES[cn]
+                if sc > road_score: road_score=sc; hazard_label=lbl
         road_frame = results[0].plot()
-        if hazard_label != "None":
-            add_log(f"Hazard: {hazard_label} detected!", "warning")
+        hc = (0,255,100) if road_score==0 else (0,80,255)
+        cv2.putText(road_frame, f"  {hazard_label} ({road_score}pts)", (12,36), cv2.FONT_HERSHEY_SIMPLEX, 0.72, hc, 2)
+        if hazard_label!="None" and frame_count%30==0: add_log(f"Hazard: {hazard_label}","warning")
 
-    cv2.putText(road_frame,
-        f"HAZARD: {hazard_label} ({road_score}pts)",
-        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.75,
-        (0, 255, 100) if road_score == 0 else (0, 100, 255), 2)
-
-    # Calculate risk
+    # ── RISK ──
     final_score, level = calculate_risk(road_score, driver_score)
-    risk_color = get_risk_color(level)
+    col = get_col(level); bg = get_bg(level)
+    is_critical = level=="CRITICAL"; is_high = level in ["HIGH","CRITICAL"]
 
-    # Add risk overlay to driver frame
-    overlay_color = {
-        "SAFE": (0, 255, 100), "MEDIUM": (0, 170, 255),
-        "HIGH": (0, 100, 255), "CRITICAL": (0, 0, 255)
-    }[level]
+    cv2_col = {"SAFE":(0,255,157),"MEDIUM":(0,214,255),"HIGH":(0,109,255),"CRITICAL":(23,68,255)}[level]
+    cv2.putText(driver_frame, f"  RISK {final_score}/100  {level}", (12,36), cv2.FONT_HERSHEY_SIMPLEX, 0.72, cv2_col, 2)
 
-    cv2.putText(driver_frame, f"RISK: {final_score}/100",
-        (20, h-50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, overlay_color, 2)
-    cv2.putText(driver_frame, level,
-        (20, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, overlay_color, 2)
+    # ── VOICE ──
+    current_time = time.time()
+    if current_time-voice_timer > 5 and is_high:
+        threading.Thread(target=give_voice_advice, args=(level,hazard_label,driver_state), daemon=True).start()
+        voice_timer = current_time
+        add_log(f"Voice alert fired: {level}","info")
 
-    # Convert frames
-    driver_rgb = cv2.cvtColor(driver_frame, cv2.COLOR_BGR2RGB)
-    road_rgb   = cv2.cvtColor(road_frame, cv2.COLOR_BGR2RGB)
+    buzzer_on = is_high; led_on = is_critical; vib_on = is_critical
+    voice_on  = is_high; sms_on = is_critical and (current_time-start_time)>30
 
-    # Update camera feeds
-    driver_img.image(driver_rgb, use_container_width=True)
-    road_img.image(road_rgb, use_container_width=True)
+    # ═══ UPDATE UI ═══
 
-    # Update driver status
-    status_html = ""
-    for icon, title, value, stype in detections:
-        color_map = {
-            "safe": "#00ff88", "warning": "#ffaa00",
-            "critical": "#ff0044", "info": "#4a9eff"
-        }
-        color = color_map.get(stype, "#8b949e")
-        status_html += f"""
-        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #21262d">
-            <span style="font-size:16px">{icon}</span>
-            <span style="font-family:Rajdhani,sans-serif;font-size:0.8rem;color:#8b949e;text-transform:uppercase;letter-spacing:1px;flex:1">{title}</span>
-            <span style="font-family:Orbitron,monospace;font-size:0.75rem;font-weight:700;color:{color}">{value}</span>
-        </div>"""
-    driver_status.markdown(status_html, unsafe_allow_html=True)
-
-    # Update risk display
-    risk_html = f"""
-    <div style="text-align:center;padding:1rem 0">
-        <div style="font-family:Rajdhani,sans-serif;font-size:0.75rem;color:#8b949e;letter-spacing:3px;text-transform:uppercase;margin-bottom:0.5rem">RISK SCORE</div>
-        <div style="font-family:Orbitron,monospace;font-size:3.5rem;font-weight:900;color:{risk_color};line-height:1;text-shadow:0 0 20px {risk_color}44">{final_score}</div>
-        <div style="font-family:Rajdhani,sans-serif;font-size:0.7rem;color:#8b949e;margin:0.3rem 0">OUT OF 100</div>
-        <div style="background:{'rgba(255,0,68,0.1)' if level=='CRITICAL' else 'rgba(0,0,0,0.3)'};border:1px solid {risk_color};border-radius:20px;padding:0.3rem 1.2rem;display:inline-block;margin:0.5rem 0">
-            <span style="font-family:Orbitron,monospace;font-size:0.9rem;font-weight:700;color:{risk_color};letter-spacing:3px">{level}</span>
-        </div>
-        <div style="background:#161b22;border-radius:6px;height:8px;overflow:hidden;margin:0.8rem 0">
-            <div style="width:{final_score}%;height:100%;background:linear-gradient(90deg,{risk_color}88,{risk_color});transition:width 0.3s ease;border-radius:6px"></div>
-        </div>
-        <div style="margin-top:0.8rem">
-            <div style="display:flex;justify-content:space-between;margin:4px 0">
-                <span style="font-family:Rajdhani,sans-serif;font-size:0.78rem;color:#8b949e">Road Hazard</span>
-                <span style="font-family:Orbitron,monospace;font-size:0.78rem;color:{'#ff6600' if road_score>0 else '#00ff88'}">{road_score}pts</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin:4px 0">
-                <span style="font-family:Rajdhani,sans-serif;font-size:0.78rem;color:#8b949e">Driver Risk</span>
-                <span style="font-family:Orbitron,monospace;font-size:0.78rem;color:{'#ff6600' if driver_score>0 else '#00ff88'}">{driver_score}pts</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin:4px 0">
-                <span style="font-family:Rajdhani,sans-serif;font-size:0.78rem;color:#8b949e">Formula</span>
-                <span style="font-family:Orbitron,monospace;font-size:0.72rem;color:#4a9eff">{'x1.5' if road_score>0 and driver_score>0 else 'Direct'}</span>
-            </div>
-        </div>
-    </div>"""
-    risk_display.markdown(risk_html, unsafe_allow_html=True)
-
-    # Road status
-    road_html = f"""
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;margin-top:4px">
-        <span style="font-size:18px">{'⚠️' if road_score > 0 else '✅'}</span>
+    # Header
+    header_ph.markdown(f"""
+    <div class="header-wrap">
         <div>
-            <div style="font-family:Rajdhani,sans-serif;font-size:0.75rem;color:#8b949e;text-transform:uppercase;letter-spacing:1px">Detected Hazard</div>
-            <div style="font-family:Orbitron,monospace;font-size:0.9rem;font-weight:700;color:{'#ff6600' if road_score>0 else '#00ff88'}">{hazard_label}</div>
-        </div>
-        <div style="margin-left:auto">
-            <div style="font-family:Orbitron,monospace;font-size:1.2rem;font-weight:900;color:{'#ff6600' if road_score>0 else '#00ff88'}">{road_score}</div>
-            <div style="font-family:Rajdhani,sans-serif;font-size:0.7rem;color:#8b949e">PTS</div>
-        </div>
-    </div>"""
-    road_status.markdown(road_html, unsafe_allow_html=True)
-
-    # Voice alert display
-    alert_messages = {
-        "SAFE": ("✅", "All systems normal. Drive safely.", "safe"),
-        "MEDIUM": ("⚠️", f"Caution: {hazard_label if hazard_label != 'None' else driver_state} detected.", "info"),
-        "HIGH": ("🔶", f"WARNING: {hazard_label if hazard_label != 'None' else driver_state}. Slow down!", "warning"),
-        "CRITICAL": ("🚨", f"CRITICAL DANGER! {hazard_label} ahead! Driver is {driver_state}!", "critical"),
-    }
-    icon, msg, atype = alert_messages[level]
-    color_map2 = {"safe": "#00ff88", "info": "#4a9eff", "warning": "#ffaa00", "critical": "#ff0044"}
-    bg_map = {"safe": "rgba(0,255,136,0.05)", "info": "rgba(74,159,255,0.05)",
-              "warning": "rgba(255,170,0,0.08)", "critical": "rgba(255,0,68,0.1)"}
-    alert_color = color_map2[atype]
-    alert_bg    = bg_map[atype]
-
-    voice_html = f"""
-    <div style="background:{alert_bg};border-left:3px solid {alert_color};border-radius:0 8px 8px 0;padding:0.8rem 1rem;margin:0.3rem 0">
-        <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:1.4rem">{icon}</span>
-            <div>
-                <div style="font-family:Rajdhani,sans-serif;font-size:0.95rem;color:{alert_color};letter-spacing:1px">{msg}</div>
-                <div style="font-family:Rajdhani,monospace;font-size:0.75rem;color:#8b949e;margin-top:2px">Level: {level} | Score: {final_score}/100</div>
+            <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border:2px solid var(--accent-cyan);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 0 12px rgba(0,229,255,0.4)">🛡️</div>
+                <div>
+                    <div class="header-title">SAFEGUARD AI</div>
+                    <div class="header-subtitle">MULTIMODAL DRIVER SAFETY — VTU 2025-26</div>
+                </div>
             </div>
         </div>
-    </div>"""
-    voice_display.markdown(voice_html, unsafe_allow_html=True)
+        <div style="display:flex;gap:20px;align-items:center">
+            <div><div class="hstat-val">{ups}</div><div class="hstat-label">UPTIME</div></div>
+            <div><div class="hstat-val" style="color:{'#ff1744' if road_score>0 else '#00ff9d'}">{road_score}</div><div class="hstat-label">ROAD PTS</div></div>
+            <div><div class="hstat-val" style="color:{'#ff1744' if driver_score>0 else '#00ff9d'}">{driver_score}</div><div class="hstat-label">DRIVER PTS</div></div>
+            <div><div class="hstat-val">{frame_count}</div><div class="hstat-label">FRAMES</div></div>
+        </div>
+        <div class="status-pill" style="background:{'rgba(255,23,68,0.08)' if is_critical else 'rgba(0,255,157,0.08)'};border-color:{'rgba(255,23,68,0.3)' if is_critical else 'rgba(0,255,157,0.2)'}">
+            <div style="width:8px;height:8px;border-radius:50%;background:{col};animation:pulse 1.5s ease-in-out infinite"></div>
+            <div style="font-family:Orbitron,monospace;font-size:0.65rem;color:{col};letter-spacing:2px">{level}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # System log
-    log_html = ""
-    for ts, lmsg, ltype in reversed(log_messages[-6:]):
-        lcolor = color_map2.get(ltype, "#8b949e")
-        log_html += f"""
-        <div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #21262d11;font-family:Rajdhani,monospace;font-size:0.8rem">
-            <span style="color:#4a9eff;min-width:60px">{ts}</span>
-            <span style="color:{lcolor}">{lmsg}</span>
-        </div>"""
-    log_display.markdown(log_html or '<div style="color:#8b949e;font-size:0.8rem">No events yet...</div>',
-        unsafe_allow_html=True)
+    # Camera feeds
+    driver_img.image(cv2.cvtColor(driver_frame,cv2.COLOR_BGR2RGB), use_container_width=True)
+    road_img.image(cv2.cvtColor(road_frame,cv2.COLOR_BGR2RGB),     use_container_width=True)
+
+    # Detection cards
+    cards = '<div class="detect-grid">'
+    for icon,title,value,dtype,vc in dets:
+        cards += f'<div class="detect-card {dtype}"><span style="font-size:17px">{icon}</span><div><div class="detect-title">{title}</div><div class="detect-value" style="color:{vc}">{value}</div></div></div>'
+    cards += '</div>'
+    detect_ph.markdown(cards, unsafe_allow_html=True)
+
+    # Risk panel
+    formula = f"({road_score}+{driver_score})×1.5" if road_score>0 and driver_score>0 else "DIRECT SUM"
+    risk_ph.markdown(f"""
+    <div class="risk-panel" style="{'animation:critFlash 0.8s ease-in-out infinite' if is_critical else ''}">
+        <div style="font-family:Share Tech Mono,monospace;font-size:0.58rem;color:var(--text-muted);letter-spacing:3px;margin-bottom:3px">UNIFIED RISK SCORE</div>
+        <div class="risk-number" style="color:{col};text-shadow:0 0 18px {col}44">{final_score}</div>
+        <div style="font-family:Share Tech Mono,monospace;font-size:0.6rem;color:var(--text-muted);letter-spacing:2px">OUT OF 100</div>
+        <div class="risk-level-badge" style="color:{col};border:1px solid {col};background:{bg}">{level}</div>
+        <div class="risk-bar-track"><div style="height:100%;width:{final_score}%;background:linear-gradient(90deg,{col}88,{col});border-radius:4px;transition:width 0.6s ease"></div></div>
+        <div class="score-grid">
+            <div class="score-cell"><div class="score-cell-label">ROAD HAZARD</div><div class="score-cell-val" style="color:{'#ff6d00' if road_score>0 else '#00ff9d'}">{road_score}</div></div>
+            <div class="score-cell"><div class="score-cell-label">DRIVER RISK</div><div class="score-cell-val" style="color:{'#ff6d00' if driver_score>0 else '#00ff9d'}">{driver_score}</div></div>
+        </div>
+        <div class="formula-chip">⚡ {formula} = {final_score}</div>
+        <div style="margin-top:6px;font-family:Share Tech Mono,monospace;font-size:0.58rem;color:var(--text-muted)">
+            {'1.5× COMPOUNDING ACTIVE' if road_score>0 and driver_score>0 else 'STANDARD CALCULATION'}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Road metric
+    road_ph.markdown(f"""
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;background:rgba(0,15,30,0.6);border:1px solid #0d2744;border-radius:6px;margin-top:4px">
+        <span style="font-size:19px">{'⚠️' if road_score>0 else '✅'}</span>
+        <div style="flex:1">
+            <div style="font-family:Share Tech Mono,monospace;font-size:0.57rem;color:#4a6fa5;letter-spacing:1px">DETECTED HAZARD</div>
+            <div style="font-family:Orbitron,monospace;font-size:0.82rem;font-weight:700;color:{'#ff6d00' if road_score>0 else '#00ff9d'}">{hazard_label}</div>
+        </div>
+        <div style="text-align:right">
+            <div style="font-family:Orbitron,monospace;font-size:1.3rem;font-weight:900;color:{'#ff6d00' if road_score>0 else '#00ff9d'}">{road_score}</div>
+            <div style="font-family:Share Tech Mono,monospace;font-size:0.52rem;color:#4a6fa5">PTS</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Alert chips
+    alerts_ph.markdown(f"""
+    <div style="background:rgba(5,15,30,0.8);border:1px solid #0d2744;border-radius:8px;padding:7px 9px">
+        <div style="font-family:Share Tech Mono,monospace;font-size:0.57rem;color:#4a6fa5;letter-spacing:2px;margin-bottom:5px">ALERT LAYERS</div>
+        <div>
+            <span class="alert-chip c-buz {'active' if buzzer_on else ''}">BUZZER</span>
+            <span class="alert-chip c-led {'active' if led_on else ''}">LED</span>
+            <span class="alert-chip c-vib {'active' if vib_on else ''}">VIBRATE</span>
+            <span class="alert-chip c-voice {'active' if voice_on else ''}">VOICE AI</span>
+            <span class="alert-chip c-sms {'active' if sms_on else ''}">SMS</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Voice banner
+    vm = {"SAFE":("✅","All systems normal. Drive safely.","#00ff9d","rgba(0,255,157,0.06)","rgba(0,255,157,0.18)"),
+          "MEDIUM":(f"⚠️",f"Caution: {hazard_label if hazard_label!='None' else driver_state} detected.","#ffd600","rgba(255,214,0,0.06)","rgba(255,214,0,0.2)"),
+          "HIGH":("🔶",f"Warning! {hazard_label if hazard_label!='None' else driver_state}. Slow down!","#ff6d00","rgba(255,109,0,0.07)","rgba(255,109,0,0.28)"),
+          "CRITICAL":("🚨",f"CRITICAL! {hazard_label} ahead! Driver is {driver_state}!","#ff1744","rgba(255,23,68,0.09)","rgba(255,23,68,0.38)")}[level]
+    voice_ph.markdown(f"""
+    <div style="background:{vm[3]};border:1px solid {vm[4]};border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:19px">{vm[0]}</span>
+        <div style="flex:1">
+            <div style="font-family:Share Tech Mono,monospace;font-size:0.57rem;color:#4a6fa5;letter-spacing:2px;margin-bottom:2px">VOICE ALERT</div>
+            <div style="font-family:Exo 2,sans-serif;font-size:0.82rem;font-weight:600;color:{vm[2]}">{vm[1]}</div>
+        </div>
+        <div style="font-family:Share Tech Mono,monospace;font-size:0.58rem;color:{vm[2]};text-align:right">{level}<br/>{final_score}/100</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Log
+    log_html = '<div class="log-panel"><div style="font-family:Share Tech Mono,monospace;font-size:0.56rem;color:#1e3a5f;letter-spacing:2px;margin-bottom:4px;border-bottom:1px solid #0d2744;padding-bottom:2px">SYSTEM LOG</div>'
+    for ts,msg,lvl in reversed(log_msgs):
+        log_html += f'<div class="log-entry"><span class="log-time">{ts}</span><span class="log-{lvl}">{msg}</span></div>'
+    log_html += '</div>'
+    log_ph.markdown(log_html, unsafe_allow_html=True)
 
     time.sleep(0.03)
 
