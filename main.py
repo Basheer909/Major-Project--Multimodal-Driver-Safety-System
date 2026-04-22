@@ -1,6 +1,7 @@
 # main.py
 # Main integration file
 # Connects all modules together
+# Pothole model disabled - training in progress
 
 import cv2
 import numpy as np
@@ -24,11 +25,11 @@ print("Loading YOLOv11 model...")
 yolo_model = YOLO("yolo11n.pt")
 print("YOLOv11 loaded! ✅")
 
-# Pothole model disabled for now
+# Pothole model disabled - training in progress
 pothole_model = None
-print("Using standard YOLO detection only")
+print("Pothole model disabled - training in progress")
 
-# Load custom earphone model if exists
+# Load earphone model if exists
 earphone_model = None
 if os.path.exists("models/earphone_best.pt"):
     print("Loading earphone model...")
@@ -114,7 +115,6 @@ def process_road_frame(frame):
     """Runs YOLOv11 on road camera"""
     global road_score, hazard_label
 
-    # Standard YOLOv11 detection for ALL objects
     results = yolo_model(frame, conf=0.4, verbose=False)
     max_score = 0
     max_label = "None"
@@ -131,10 +131,8 @@ def process_road_frame(frame):
     road_score   = max_score
     hazard_label = max_label
 
-    # Get annotated frame showing ALL detections
     annotated = results[0].plot()
 
-    # Show hazard info
     colour = (0, 255, 0) if max_score == 0 else (0, 0, 255)
     cv2.putText(annotated,
         f"Hazard: {max_label} ({max_score}pts)",
@@ -269,8 +267,8 @@ def main():
     arduino = ArduinoController()
 
     # Open cameras
-    driver_cam = cv2.VideoCapture(1)  # Laptop webcam
-    road_cam   = cv2.VideoCapture(0)  # USB webcam
+    driver_cam = cv2.VideoCapture(1)
+    road_cam   = cv2.VideoCapture(0)
 
     if not driver_cam.isOpened():
         print("ERROR: Driver camera not found!")
@@ -294,7 +292,6 @@ def main():
                 print("Driver camera error!")
                 break
 
-            # Process frames
             driver_frame = process_driver_frame(
                 driver_frame, landmarker)
 
@@ -304,11 +301,9 @@ def main():
                 road_frame = process_road_frame(
                     driver_frame.copy())
 
-            # Calculate risk
             final_score, level = calculate_risk(
                 road_score, driver_score)
 
-            # Show risk on driver frame
             colours = {
                 "SAFE":     (0, 255, 0),
                 "MEDIUM":   (0, 255, 255),
@@ -323,13 +318,11 @@ def main():
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8, colour, 2)
 
-            # Send alert to Arduino every 2 seconds
             current_time = time.time()
             if current_time - alert_timer > 2:
                 arduino.trigger_alert(level)
                 alert_timer = current_time
 
-            # Handle CRITICAL escalation
             if level == "CRITICAL":
                 if critical_start_time is None:
                     critical_start_time = current_time
@@ -342,7 +335,6 @@ def main():
                 critical_start_time = None
                 arduino.trigger_external_led("OFF")
 
-            # Voice alert every 5 seconds
             if current_time - voice_timer > 5:
                 if level in ["HIGH", "CRITICAL"]:
                     threading.Thread(
@@ -353,13 +345,11 @@ def main():
                     ).start()
                     voice_timer = current_time
 
-            # Print status in terminal
             print(f"Road:{road_score}({hazard_label}) "
                   f"Driver:{driver_score}({driver_state}) "
                   f"Score:{final_score} Level:{level}  ",
                   end='\r')
 
-            # Show both camera feeds
             cv2.imshow("Road Camera", road_frame)
             cv2.imshow("Driver Camera", driver_frame)
 
